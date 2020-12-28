@@ -56,7 +56,7 @@ class BaseAPI(object):
         """:type: str"""
 
         logger = logging.getLogger(kwargs.get('logger', api_config['logger']))
-        if len(logger.handlers) is 0:
+        if len(logger.handlers) == 0:
             handler = logging.StreamHandler(kwargs.get('log_destination', api_config['log_destination']))
             formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s')
             handler.setFormatter(formatter)

@@ -420,11 +420,11 @@ class Group(ModuleAPI):
         start = int(start)
         comments_count = start
         import os
-        output_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), str(topic_id))
-        output_md = os.path.join(output_folder, 'md')
+        output_folder = os.getcwd()
+        output_md = os.path.join(output_folder, 'md', str(topic_id))
         if not os.path.exists(output_md):
             os.makedirs(output_md)
-        output_json = os.path.join(output_folder, 'json')
+        output_json = os.path.join(output_folder, 'json', str(topic_id))
         if not os.path.exists(output_json):
             os.makedirs(output_json)
         while True:
