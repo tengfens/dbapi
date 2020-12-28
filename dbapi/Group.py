@@ -416,32 +416,90 @@ class Group(ModuleAPI):
         :param start: 翻页
         :return: 带下一页的列表
         """
-        xml = self.api.xml(API_GROUP_GET_TOPIC % topic_id, params={'start': start})
-        xml_results = xml.xpath('//ul[@id="comments"]/li')
-        results = []
-        for item in xml_results:
-            try:
-                author_avatar = item.xpath('.//img/@src')[0]
-                author_url = item.xpath('.//div[@class="user-face"]/a/@href')[0]
-                author_alias = slash_right(author_url)
-                author_signature = item.xpath('.//h4/text()')[1].strip()
-                author_nickname = item.xpath('.//h4/a/text()')[0].strip()
-                created_at = item.xpath('.//h4/span/text()')[0].strip()
-                content = etree.tostring(item.xpath('.//div[@class="reply-doc content"]/p')[0]).decode('utf8').strip()
-                cid = item.get('id')
-                results.append({
-                    'id': cid,
-                    'author_avatar': author_avatar,
-                    'author_url': author_url,
-                    'author_alias': author_alias,
-                    'author_signature': author_signature,
-                    'author_nickname': author_nickname,
-                    'created_at': created_at,
-                    'content': unescape(content),
-                })
-            except Exception as e:
-                self.api.logger.exception('parse comment exception: %s' % e)
-        return build_list_result(results, xml)
+        all_results = []
+        start = int(start)
+        comments_count = start
+        import os
+        output_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), str(topic_id))
+        output_md = os.path.join(output_folder, 'md')
+        if not os.path.exists(output_md):
+            os.makedirs(output_md)
+        output_json = os.path.join(output_folder, 'json')
+        if not os.path.exists(output_json):
+            os.makedirs(output_json)
+        while True:
+            xml = self.api.xml(API_GROUP_GET_TOPIC % topic_id, params={'start': start})
+            xml_results = xml.xpath('//ul[@id="comments"]/li')
+            results = []
+            for item in xml_results:
+                try:
+                    author_avatar = item.xpath('.//img/@src')[0]
+                    author_url = item.xpath('.//div[@class="user-face"]/a/@href')[0]
+                    author_alias = slash_right(author_url)
+                    author_signature = item.xpath('.//h4/text()')[1].strip()
+                    author_nickname = item.xpath('.//h4/a/text()')[0].strip()
+                    topic_author = item.xpath('.//h4/span[@class="topic-author-icon"]/text()')
+                    topic_author = "" if len(topic_author) == 0 else topic_author[0].strip()
+                    created_at = item.xpath('.//h4/span[@class="pubtime"]/text()')[0].strip()
+                    reply_to_url = item.xpath('.//div[@class="reply-quote-content"]/span[@class="pubdate"]/a/@href')
+                    reply_to_url = "" if len(reply_to_url) == 0 else reply_to_url[0].strip()
+                    reply_to = item.xpath('.//div[@class="reply-quote-content"]/span[@class="pubdate"]/a/text()')
+                    reply_to = "" if len(reply_to) == 0 else reply_to[0].strip()
+                    reply_quote_content = item.xpath('.//div[@class="reply-quote-content"]/span/text()')
+                    reply_quote_content = "" if len(reply_quote_content) == 0 else reply_quote_content[0].strip()
+                    content = item.xpath('.//div[@class="reply-doc content"]/p/text()')
+                    content = "" if len(content) == 0 else content[0].strip()
+                    img = item.xpath('.//img/@data-orig')
+                    img = "" if len(img) == 0 else img[0].strip()
+                    cid = item.get('id')
+                    results.append({
+                        'id': cid,
+                        'author_avatar': author_avatar,
+                        'author_url': author_url,
+                        'author_alias': author_alias,
+                        'author_signature': author_signature,
+                        'author_nickname': author_nickname,
+                        'topic_author': topic_author,
+                        'created_at': created_at,
+                        'reply_to_url': reply_to_url,
+                        'reply_to': reply_to,
+                        'reply_quote_content': reply_quote_content,
+                        'content': unescape(content),
+                        'img': img,
+                    })
+                    out_content = ''
+                    out_content += '* [![{}]({})]({})'.format(author_nickname, author_avatar, author_url)
+                    out_content += '    ' + '[{}]({})'.format(author_nickname, author_url) + ('    ' + topic_author if topic_author else '') + '    ' + created_at + '  \n'
+                    if reply_to:
+                        out_content += '  >' + reply_quote_content.replace('\n', '  \n  >') + '  \n'
+                        out_content += '  >\n'
+                        out_content += '  >-- ' + '[{}]({})'.format(reply_to, reply_to_url) + '  \n'
+                        out_content += '  \n'
+                    if img:
+                        out_content += '  ![{}]({})'.format('', img) + '  \n'
+                    out_content += '  ' + content.replace('\n', '  \n  ') + '  \n'
+                    out_content += '---\n'
+                    file = open(os.path.join(output_md, 'comments{}-{}.md'.format(start+1, start+100)), 'ab')
+                    file.write(out_content.encode())
+                    file.close()
+                except Exception as e:
+                    self.api.logger.exception(
+                        'parse comment exception: %s' % e)
+            all_results.extend(results)
+            list_results = build_list_result(results, xml)
+            comments_count += int(list_results['count'])
+            import json
+            file = open(os.path.join(output_json, 'comments{}-{}.json'.format(start+1, start+100)), 'w+')
+            file.write(json.dumps(build_list_result(results, xml), indent=2))
+            file.close()
+            if list_results['next_start']:
+                start = int(list_results['next_start'])
+            elif list_results['count'] < 100 and list_results['count'] > 0:
+                break
+            import time
+            import random
+            time.sleep(10 * random.uniform(1.5, 2.5))
+        return {'results': all_results, 'count': comments_count}
 
     def add_comment(self, topic_id, content, reply_id=None):
         """
