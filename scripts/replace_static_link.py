@@ -4,7 +4,7 @@ import sys
 import time
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
-IMG_DIR = os.path.join(FILE_DIR, 'image')
+IMG_DIR = os.path.join(os.path.dirname(FILE_DIR), 'image')
 
 def link_replacement(dir_path):
     file_list = os.listdir(dir_path)
